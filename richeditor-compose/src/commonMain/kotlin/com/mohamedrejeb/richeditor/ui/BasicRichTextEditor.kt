@@ -8,9 +8,15 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -97,6 +103,7 @@ public fun BasicRichTextEditor(
     onTextLayout: (TextLayoutResult) -> Unit = {},
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     cursorBrush: Brush = SolidColor(Color.Black),
+    onTextChanged: (String) -> Unit = { },
     decorationBox: @Composable (innerTextField: @Composable () -> Unit) -> Unit =
         @Composable { innerTextField -> innerTextField() }
 ) {
@@ -116,7 +123,8 @@ public fun BasicRichTextEditor(
         interactionSource = interactionSource,
         cursorBrush = cursorBrush,
         decorationBox = decorationBox,
-        contentPadding = PaddingValues()
+        contentPadding = PaddingValues(),
+        onTextChanged = onTextChanged
     )
 }
 
@@ -192,7 +200,8 @@ public fun BasicRichTextEditor(
     cursorBrush: Brush = SolidColor(Color.Black),
     decorationBox: @Composable (innerTextField: @Composable () -> Unit) -> Unit =
         @Composable { innerTextField -> innerTextField() },
-    contentPadding: PaddingValues
+    contentPadding: PaddingValues,
+    onTextChanged: (String) -> Unit = { },
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -230,15 +239,31 @@ public fun BasicRichTextEditor(
     }
 
     CompositionLocalProvider(LocalClipboardManager provides richClipboardManager) {
+
+        // TODO: Change xx01
+        val focusRequester = remember { FocusRequester() }
+
+        // TODO: Change xx02
+        LaunchedEffect(Unit) {
+            // Requesting focus here will automatically show the keyboard on Android.
+            focusRequester.requestFocus()
+        }
+
         BasicTextField(
             value = state.textFieldValue,
             onValueChange = {
                 if (readOnly) return@BasicTextField
                 if (it.text.length > maxLength) return@BasicTextField
 
+                // TODO: Change xx03
+                val old = state.toHtml()
+                onTextChanged(old)
+
                 state.onTextFieldValueChange(it)
             },
             modifier = modifier
+                // TODO: Change xx03
+                .focusRequester(focusRequester)
                 .onPreviewKeyEvent { event ->
                     if (readOnly)
                         return@onPreviewKeyEvent false
@@ -248,7 +273,11 @@ public fun BasicRichTextEditor(
                 .drawRichSpanStyle(
                     richTextState = state,
                     topPadding = with(density) { contentPadding.calculateTopPadding().toPx() },
-                    startPadding = with(density) { contentPadding.calculateStartPadding(layoutDirection).toPx() },
+                    startPadding = with(density) {
+                        contentPadding.calculateStartPadding(
+                            layoutDirection
+                        ).toPx()
+                    },
                 )
                 .then(
                     if (!readOnly)

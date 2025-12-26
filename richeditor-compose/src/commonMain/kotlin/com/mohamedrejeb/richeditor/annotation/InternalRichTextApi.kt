@@ -1,5 +1,6 @@
 package com.mohamedrejeb.richeditor.annotation
 
+@Suppress("ExperimentalAnnotationRetention")
 @RequiresOptIn(
     level = RequiresOptIn.Level.ERROR,
     message = "This is internal API that may change frequently and without warning."
