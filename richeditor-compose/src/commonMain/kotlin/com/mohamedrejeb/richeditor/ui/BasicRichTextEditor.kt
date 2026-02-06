@@ -13,6 +13,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -243,10 +249,12 @@ public fun BasicRichTextEditor(
         // TODO: Change xx01
         val focusRequester = remember { FocusRequester() }
 
-        // TODO: Change xx02
-        LaunchedEffect(Unit) {
-            // Requesting focus here will automatically show the keyboard on Android.
-            focusRequester.requestFocus()
+        // Request focus only when editable to avoid unexpected keyboard shows in read-only previews
+        LaunchedEffect(readOnly) {
+            if (!readOnly) {
+                // Requesting focus here will automatically show the keyboard on Android.
+                focusRequester.requestFocus()
+            }
         }
 
         BasicTextField(
@@ -255,10 +263,7 @@ public fun BasicRichTextEditor(
                 if (readOnly) return@BasicTextField
                 if (it.text.length > maxLength) return@BasicTextField
 
-                // TODO: Change xx03
-                val old = state.toHtml()
-                onTextChanged(old)
-
+                // Update text field value only — heavy HTML serialization is handled in a debounced background worker below
                 state.onTextFieldValueChange(it)
             },
             modifier = modifier
@@ -321,7 +326,22 @@ public fun BasicRichTextEditor(
             decorationBox = decorationBox,
         )
     }
-}
+
+    // Notify consumers with debounced HTML serialization off the main thread when editable
+    LaunchedEffect(state, readOnly) {
+        if (readOnly) return@LaunchedEffect
+        snapshotFlow { state.textFieldValue }
+            .debounce(250)
+            .mapLatest {
+                withContext(Dispatchers.Default) {
+                    state.toHtml()
+                }
+            }
+            .collectLatest { html ->
+                onTextChanged(html)
+            }
+    }
+} 
 
 internal expect fun Modifier.adjustTextIndicatorOffset(
     state: RichTextState,
